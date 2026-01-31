@@ -47,23 +47,37 @@
     }
     #error:not(:empty), .error:not(:empty) { display: block; }
   </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js",
+      "three/": "https://cdn.jsdelivr.net/npm/three@0.150.1/"
+    }
+  }
+  </script>
 </head>
 <body>
   <div id="info">Loading…</div>
   <div id="error" class="error"></div>
   <video id="video" playsinline muted></video>
   <script>
+    function showErr(msg) {
+      var err = document.getElementById('error');
+      var info = document.getElementById('info');
+      if (err) { err.textContent = msg; err.className = 'error'; }
+      if (info) info.textContent = '';
+    }
     window.addEventListener('error', function(e) {
-      var el = document.getElementById('error') || document.getElementById('info');
-      if (el) el.textContent = 'Error: ' + (e.message || e.reason || 'script failed');
-      if (el) el.className = 'error';
+      if (e.message) showErr('Error: ' + e.message);
     });
     window.addEventListener('unhandledrejection', function(e) {
-      var el = document.getElementById('error') || document.getElementById('info');
-      if (el) el.textContent = 'Error: ' + (e.reason && (e.reason.message || e.reason) || 'loading failed');
-      if (el) el.className = 'error';
+      var msg = e.reason && (e.reason.message || String(e.reason));
+      if (msg) showErr('Error: ' + msg);
     });
   </script>
   <script type="module" src="./main.js"></script>
+  <script>
+    document.getElementById('info').textContent = 'Loading… Allow camera when prompted.';
+  </script>
 </body>
 </html>

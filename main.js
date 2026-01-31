@@ -1,8 +1,8 @@
 /* Face Tracker Avatar Demo - MediaPipe + Three.js (local test app) */
 
-import * as THREE from "https://cdn.skypack.dev/three@0.150.1";
-import { OrbitControls } from "https://cdn.skypack.dev/three@0.150.1/examples/jsm/controls/OrbitControls.js";
-import { GLTFLoader } from "https://cdn.skypack.dev/three@0.150.1/examples/jsm/loaders/GLTFLoader.js";
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
   FilesetResolver,
   FaceLandmarker,
