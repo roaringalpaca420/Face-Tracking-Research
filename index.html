@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Face Tracker Avatar Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      min-height: 100vh;
+      min-height: -webkit-fill-available;
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #eee;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #video { display: none; }
+    #info {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top));
+      left: max(12px, env(safe-area-inset-left));
+      right: max(12px, env(safe-area-inset-right));
+      font-size: clamp(12px, 3vw, 14px);
+      opacity: 0.9;
+      z-index: 10;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">Loading camera &amp; model… Allow camera access when prompted.</div>
+  <video id="video" playsinline muted></video>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
