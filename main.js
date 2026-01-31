@@ -180,15 +180,11 @@ class Avatar {
 
 let faceLandmarker = null;
 let video = null;
-
-const scene = new BasicScene();
-const avatar = new Avatar(
-  "https://assets.codepen.io/9177687/raccoon_head.glb",
-  scene.scene
-);
+let scene = null;
+let avatar = null;
 
 function detectFaceLandmarks(time) {
-  if (!faceLandmarker || !video) return;
+  if (!faceLandmarker || !video || !avatar) return;
   const landmarks = faceLandmarker.detectForVideo(video, time);
 
   const transformationMatrices = landmarks.facialTransformationMatrixes;
@@ -271,30 +267,75 @@ async function streamWebcamThroughFaceLandmarker() {
   });
 }
 
+function showError(msg) {
+  const errEl = document.getElementById("error");
+  const infoEl = document.getElementById("info");
+  if (errEl) {
+    errEl.textContent = msg;
+    errEl.className = "error";
+  }
+  if (infoEl) infoEl.textContent = "";
+  console.error(msg);
+}
+
 async function runDemo() {
   const info = document.getElementById("info");
+  const errorEl = document.getElementById("error");
+  if (errorEl) errorEl.textContent = "";
+
   try {
-    info.textContent = "Starting camera…";
+    info.textContent = "Requesting camera… Allow access when prompted.";
     await streamWebcamThroughFaceLandmarker();
-    info.textContent = "Loading MediaPipe model…";
+
+    if (!video) {
+      showError("Video element not found.");
+      return;
+    }
+
+    info.textContent = "Starting 3D view…";
+    scene = new BasicScene();
+    avatar = new Avatar(
+      "https://assets.codepen.io/9177687/raccoon_head.glb",
+      scene.scene
+    );
+
+    info.textContent = "Loading face model… (may take a moment)";
     const vision = await FilesetResolver.forVisionTasks(
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.1.0-alpha-16/wasm"
     );
-    faceLandmarker = await FaceLandmarker.createFromModelPath(
-      vision,
-      "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task"
-    );
-    await faceLandmarker.setOptions({
-      baseOptions: { delegate: "GPU" },
-      runningMode: "VIDEO",
-      outputFaceBlendshapes: true,
-      outputFacialTransformationMatrixes: true,
-    });
+
+    const modelPath =
+      "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
+
+    for (const delegate of ["GPU", "CPU"]) {
+      try {
+        faceLandmarker = await FaceLandmarker.createFromModelPath(vision, modelPath);
+        await faceLandmarker.setOptions({
+          baseOptions: { delegate },
+          runningMode: "VIDEO",
+          outputFaceBlendshapes: true,
+          outputFacialTransformationMatrixes: true,
+        });
+        break;
+      } catch (e) {
+        if (delegate === "CPU") throw e;
+        console.warn("GPU failed, trying CPU:", e);
+      }
+    }
+
     info.textContent = "Ready. Move your face to drive the avatar.";
-    console.log("Finished Loading MediaPipe Model.");
+    console.log("Finished loading MediaPipe model.");
   } catch (e) {
-    info.textContent = "Error: " + (e.message || e);
-    console.error(e);
+    const msg = e.message || String(e);
+    if (msg.includes("Permission") || msg.includes("NotAllowed") || msg.includes("denied")) {
+      showError("Camera access denied. Please allow camera and refresh.");
+    } else if (msg.includes("NotFound") || msg.includes("DevicesNotFound")) {
+      showError("No camera found.");
+    } else if (msg.includes("fetch") || msg.includes("network") || msg.includes("Load")) {
+      showError("Network error loading model. Check connection and try again.");
+    } else {
+      showError("Error: " + msg);
+    }
   }
 }
 

@@ -30,11 +30,40 @@
       z-index: 10;
       pointer-events: none;
     }
+    #error, .error {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 12px;
+      right: 12px;
+      transform: translateY(-50%);
+      background: #c00;
+      color: #fff;
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 20;
+      word-break: break-word;
+    }
+    #error:not(:empty), .error:not(:empty) { display: block; }
   </style>
 </head>
 <body>
-  <div id="info">Loading camera &amp; model… Allow camera access when prompted.</div>
+  <div id="info">Loading…</div>
+  <div id="error" class="error"></div>
   <video id="video" playsinline muted></video>
+  <script>
+    window.addEventListener('error', function(e) {
+      var el = document.getElementById('error') || document.getElementById('info');
+      if (el) el.textContent = 'Error: ' + (e.message || e.reason || 'script failed');
+      if (el) el.className = 'error';
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      var el = document.getElementById('error') || document.getElementById('info');
+      if (el) el.textContent = 'Error: ' + (e.reason && (e.reason.message || e.reason) || 'loading failed');
+      if (el) el.className = 'error';
+    });
+  </script>
   <script type="module" src="./main.js"></script>
 </body>
 </html>
