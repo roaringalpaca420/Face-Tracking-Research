@@ -42,13 +42,16 @@ class BasicScene {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(this.width, this.height);
+    this.renderer.setClearColor(0x000000, 1);
     THREE.ColorManagement.legacy = false;
     this.renderer.outputEncoding = THREE.sRGBEncoding;
     document.body.appendChild(this.renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    this.scene.background = new THREE.Color(0x000000);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     this.scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
     directionalLight.position.set(0, 1, 0);
     this.scene.add(directionalLight);
 
@@ -59,19 +62,7 @@ class BasicScene {
     this.controls.target = orbitTarget;
     this.controls.update();
 
-    const video = document.getElementById("video");
-    const inputFrameTexture = new THREE.VideoTexture(video);
-    if (!inputFrameTexture) {
-      throw new Error("Failed to get the 'input_frame' texture!");
-    }
-    inputFrameTexture.encoding = THREE.sRGBEncoding;
-    const inputFramesDepth = 500;
-    const inputFramesPlane = createCameraPlaneMesh(
-      this.camera,
-      inputFramesDepth,
-      new THREE.MeshBasicMaterial({ map: inputFrameTexture })
-    );
-    this.scene.add(inputFramesPlane);
+    // No video background — floating head on black only
 
     this.lastTime = performance.now();
     this.callbacks = [];
@@ -178,42 +169,90 @@ class Avatar {
   }
 }
 
+/** 2D image overlay that follows the face (e.g. PNG from your folder). */
+class FaceOverlay {
+  constructor(scene, imageUrl, options = {}) {
+    this.scene = scene;
+    this.mesh = null;
+    this.scale = options.scale ?? 40;
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      imageUrl,
+      (texture) => {
+        texture.encoding = THREE.sRGBEncoding;
+        const material = new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        });
+        const geometry = new THREE.PlaneGeometry(1, 1);
+        this.mesh = new THREE.Mesh(geometry, material);
+        this.mesh.frustumCulled = false;
+        scene.add(this.mesh);
+      },
+      undefined,
+      (err) => console.error("Failed to load face overlay image:", err)
+    );
+  }
+
+  applyMatrix(matrix, opts = {}) {
+    if (!this.mesh) return;
+    const scale = opts.scale ?? this.scale;
+    const m = matrix.clone().scale(new THREE.Vector3(scale, scale, scale));
+    this.mesh.matrixAutoUpdate = false;
+    this.mesh.matrix.copy(m);
+  }
+}
+
 let faceLandmarker = null;
 let video = null;
 let scene = null;
 let avatar = null;
+let faceOverlay = null;
 
 function detectFaceLandmarks(time) {
-  if (!faceLandmarker || !video || !avatar) return;
+  if (!faceLandmarker || !video) return;
   const landmarks = faceLandmarker.detectForVideo(video, time);
 
   const transformationMatrices = landmarks.facialTransformationMatrixes;
   if (transformationMatrices && transformationMatrices.length > 0) {
     const matrix = new THREE.Matrix4().fromArray(transformationMatrices[0].data);
-    avatar.applyMatrix(matrix, { scale: 40 });
-  }
-
-  const blendshapes = landmarks.faceBlendshapes;
-  if (blendshapes && blendshapes.length > 0) {
-    const coefsMap = retarget(blendshapes);
-    avatar.updateBlendshapes(coefsMap);
+    if (faceOverlay) faceOverlay.applyMatrix(matrix, { scale: 40 });
+    if (avatar) {
+      avatar.applyMatrix(matrix, { scale: 40 });
+      const blendshapes = landmarks.faceBlendshapes;
+      if (blendshapes && blendshapes.length > 0) {
+        avatar.updateBlendshapes(retarget(blendshapes));
+      }
+    }
   }
 }
+
+// Multipliers so mouth/tongue/jaw are more responsive; eyes/brows slightly boosted
+const BLENDSHAPE_GAIN = {
+  mouth: 2.2,
+  jaw: 2.2,
+  tongue: 2.5,
+  eye: 1.2,
+  brow: 1.2,
+  default: 1,
+};
 
 function retarget(blendshapes) {
   const categories = blendshapes[0].categories;
   const coefsMap = new Map();
   for (let i = 0; i < categories.length; ++i) {
     const blendshape = categories[i];
-    switch (blendshape.categoryName) {
-      case "browOuterUpLeft":
-      case "browOuterUpRight":
-      case "eyeBlinkLeft":
-      case "eyeBlinkRight":
-        blendshape.score *= 1.2;
-        break;
-    }
-    coefsMap.set(categories[i].categoryName, categories[i].score);
+    const name = blendshape.categoryName;
+    let gain = BLENDSHAPE_GAIN.default;
+    if (name.includes("mouth") || name.includes("Mouth")) gain = BLENDSHAPE_GAIN.mouth;
+    else if (name.includes("jaw") || name.includes("Jaw")) gain = BLENDSHAPE_GAIN.jaw;
+    else if (name.includes("tongue") || name.includes("Tongue")) gain = BLENDSHAPE_GAIN.tongue;
+    else if (name.includes("eye") || name.includes("Eye")) gain = BLENDSHAPE_GAIN.eye;
+    else if (name.includes("brow") || name.includes("Brow")) gain = BLENDSHAPE_GAIN.brow;
+    const score = Math.min(1, blendshape.score * gain);
+    coefsMap.set(name, score);
   }
   return coefsMap;
 }
@@ -294,10 +333,13 @@ async function runDemo() {
 
     info.textContent = "Starting 3D view…";
     scene = new BasicScene();
+    // 3D avatar for mouth + tongue tracking (blendshapes)
     avatar = new Avatar(
       "https://assets.codepen.io/9177687/raccoon_head.glb",
       scene.scene
     );
+    // Optional: 2D overlay (head pose only, no mouth). Set to null to use only the 3D avatar.
+    faceOverlay = null;
 
     info.textContent = "Loading face model… (may take a moment)";
     const vision = await FilesetResolver.forVisionTasks(
